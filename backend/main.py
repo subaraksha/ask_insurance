@@ -71,9 +71,10 @@ class MongoSessionStore:
             doc = collection.find_one({"user_id": user_id})
             if doc is None:
                 state = SessionState(user_id=user_id)
+                serialized_data = json.loads(state.model_dump_json())
                 collection.replace_one(
                     {"user_id": user_id},
-                    state.model_dump(),
+                    serialized_data,
                     upsert=True
                 )
                 return state
@@ -99,9 +100,12 @@ class MongoSessionStore:
         state.updated_at = datetime.now(UTC)
         
         def run() -> None:
+            # Serializing to json then back to dict converts Pydantic objects (like AnyHttpUrl)
+            # to standard native JSON types (like strings) that PyMongo can safely serialize.
+            serialized_data = json.loads(state.model_dump_json())
             collection.replace_one(
                 {"user_id": state.user_id},
-                state.model_dump(),
+                serialized_data,
                 upsert=True
             )
             
