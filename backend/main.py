@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+
+# Setup backend logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("ask-insurance-api")
 
 from backend.agents import (
     AgentConfigurationError,
@@ -67,13 +75,17 @@ class InMemorySessionStore:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up Mongo collections without preventing chat startup during a DB outage."""
+    logger.info("Initializing application lifespan setup...")
     app.state.catalog_setup_error = None
     app.state.catalog_setup = None
     try:
         app.state.catalog_setup = await asyncio.to_thread(ensure_database_setup)
+        logger.info(f"Database setup complete. Status details: {app.state.catalog_setup}")
     except Exception as error:
         app.state.catalog_setup_error = str(error)
+        logger.error(f"Lifespan startup database setup failed: {error}", exc_info=True)
     yield
+    logger.info("Shutting down application lifespan...")
 
 
 app = FastAPI(title="Ask Insurance API", version="0.2.0", lifespan=lifespan)
@@ -213,14 +225,17 @@ async def seed_supplied_catalog(fetch_policy_wordings: bool = Query(default=True
 
 @app.post("/sessions", response_model=SessionResponse)
 async def create_session(request: CreateSessionRequest) -> SessionResponse:
+    logger.info(f"Creating session for user_id: {request.user_id}")
     state = await sessions.get_or_create(request.user_id)
     return SessionResponse(user_id=state.user_id, profile=state.profile, messages=state.messages)
 
 
 @app.post("/sessions/{user_id}/messages", response_model=ChatResponse)
 async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
+    logger.info(f"Received message for user_id {user_id}. Content length: {len(request.message)}")
     state = await sessions.get(user_id)
     if state is None:
+        logger.warning(f"Session not found for user_id: {user_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown user session.")
 
     user_message = request.message.strip()
@@ -254,7 +269,10 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             for p in previous_suggested:
                 p["is_selected_by_user_for_comparison"] = True
 
+        logger.info(f"Invoking Gemini Advisor Agent for user_id {user_id}...")
         advisor_turn = await run_advisor(state.profile, history, user_message, previous_suggested)
+        logger.info(f"Advisor response generated. Scope status: {advisor_turn.scope_status}")
+        
         if advisor_turn.scope_status == "out_of_scope":
             assistant_message = (
                 "That’s outside my scope. I can help with choosing health insurance."
@@ -286,6 +304,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
                         suggested_products = msg.suggested_products
                         break
             elif should_suggest_products:
+                logger.info(f"Generating semantic recommendations for user_id {user_id}...")
                 retrieval_query = json.dumps(
                     {"profile": state.profile.model_dump(), "latest_user_message": user_message},
                     ensure_ascii=False,
@@ -294,7 +313,9 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
                     suggested_products = await asyncio.to_thread(
                         semantic_search, retrieval_query, limit=3
                     )
-                except Exception:
+                    logger.info(f"Retrieved {len(suggested_products)} products: {[p.product for p in suggested_products]}")
+                except Exception as err:
+                    logger.error(f"Semantic search retrieval failed: {err}", exc_info=True)
                     suggested_products = []
             else:
                 suggested_products = []
