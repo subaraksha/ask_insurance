@@ -8,7 +8,8 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://ask-insurance-7kgu.onrender.com")
+# API_BASE_URL = os.getenv("API_BASE_URL", "https://ask-insurance-7kgu.onrender.com")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 LOGO_PATH = Path(__file__).resolve().parents[1] / "ask_inurane_logo.png"
 
 st.set_page_config(page_title="Ask Insurance", page_icon="🩺", layout="wide")
@@ -30,6 +31,12 @@ st.markdown(
             background: #1f2937; color: #f9fafb; border-bottom-left-radius: 0.25rem;
         }
         .turn-details { max-width: 72%; margin: 0 0 1.3rem 0; }
+        div[data-testid="stChatInput"] > div,
+        div[data-testid="stChatInput"] > div:focus-within {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
     </style>
     """,
     unsafe_allow_html=True,
