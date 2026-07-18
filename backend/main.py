@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from pymongo import ASCENDING
 
 # Setup backend logging
 logging.basicConfig(
@@ -27,6 +28,7 @@ from backend.agents import (
 from backend.catalog import (
     catalog_status,
     ensure_database_setup,
+    get_database,
     get_policy_context,
     ingest_products,
     semantic_search,
@@ -51,25 +53,59 @@ from backend.schemas import (
 CATALOG_SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "product_catalog.json"
 
 
-class InMemorySessionStore:
-    """Hackathon-only session storage; all state is lost when the API restarts."""
+class MongoSessionStore:
+    """MongoDB-backed session store to persist user sessions and chat state across API restarts."""
 
     def __init__(self) -> None:
-        self._sessions: dict[str, SessionState] = {}
-        self._lock = asyncio.Lock()
+        self.collection_name = "user_sessions"
+
+    def _get_collection(self):
+        # We fetch the DB instance on-demand through get_database()
+        return get_database()[self.collection_name]
 
     async def get_or_create(self, user_id: str) -> SessionState:
-        async with self._lock:
-            return self._sessions.setdefault(user_id, SessionState(user_id=user_id))
+        loop = asyncio.get_running_loop()
+        collection = self._get_collection()
+        
+        def run() -> SessionState:
+            doc = collection.find_one({"user_id": user_id})
+            if doc is None:
+                state = SessionState(user_id=user_id)
+                collection.replace_one(
+                    {"user_id": user_id},
+                    state.model_dump(),
+                    upsert=True
+                )
+                return state
+            return SessionState.model_validate(doc)
+            
+        return await loop.run_in_executor(None, run)
 
     async def get(self, user_id: str) -> SessionState | None:
-        async with self._lock:
-            return self._sessions.get(user_id)
+        loop = asyncio.get_running_loop()
+        collection = self._get_collection()
+        
+        def run() -> SessionState | None:
+            doc = collection.find_one({"user_id": user_id})
+            if doc is None:
+                return None
+            return SessionState.model_validate(doc)
+            
+        return await loop.run_in_executor(None, run)
 
     async def update(self, state: SessionState) -> None:
-        async with self._lock:
-            state.updated_at = datetime.now(UTC)
-            self._sessions[state.user_id] = state
+        loop = asyncio.get_running_loop()
+        collection = self._get_collection()
+        state.updated_at = datetime.now(UTC)
+        
+        def run() -> None:
+            collection.replace_one(
+                {"user_id": state.user_id},
+                state.model_dump(),
+                upsert=True
+            )
+            
+        await loop.run_in_executor(None, run)
 
 
 @asynccontextmanager
@@ -80,6 +116,9 @@ async def lifespan(app: FastAPI):
     app.state.catalog_setup = None
     try:
         app.state.catalog_setup = await asyncio.to_thread(ensure_database_setup)
+        # Ensure index for session store is created
+        database = get_database()
+        database["user_sessions"].create_index([("user_id", ASCENDING)], unique=True)
         logger.info(f"Database setup complete. Status details: {app.state.catalog_setup}")
     except Exception as error:
         app.state.catalog_setup_error = str(error)
@@ -89,7 +128,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Ask Insurance API", version="0.2.0", lifespan=lifespan)
-sessions = InMemorySessionStore()
+sessions = MongoSessionStore()
 
 
 @app.get("/")

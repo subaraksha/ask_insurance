@@ -287,13 +287,40 @@ def _local_vector_fallback(
     The vectors remain persisted in MongoDB; cosine scoring happens in-process
     only until the deployment can serve the Atlas `$vectorSearch` stage.
     """
-    rows = list(collection.find({}, {"_id": 0}))
+    # Project out the heavy 'text' field during the full collection scan to prevent RAM spikes
+    rows = list(collection.find({}, {"text": 0}))
     for row in rows:
         embedding = row.pop("embedding", [])
-        row["score"] = sum(left * right for left, right in zip(query_embedding, embedding, strict=True))
+        if len(embedding) == len(query_embedding):
+            row["score"] = sum(left * right for left, right in zip(query_embedding, embedding, strict=True))
+        else:
+            row["score"] = 0.0
     _apply_use_case_rerank(rows, query)
-    rows.sort(key=lambda row: row["score"], reverse=True)
-    return _to_suggestions(rows, limit)
+    rows.sort(key=lambda row: row.get("score", 0.0), reverse=True)
+
+    # Pick the top unique products up to our limit and fetch only their specific text from MongoDB
+    selected_rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        product_id = row["product_id"]
+        if product_id in seen:
+            continue
+        seen.add(product_id)
+        selected_rows.append(row)
+        if len(selected_rows) >= limit:
+            break
+
+    # Lazy-load the heavy 'text' field for ONLY the winning candidates
+    for row in selected_rows:
+        doc_id = row.get("_id")
+        if doc_id:
+            matched_doc = collection.find_one({"_id": doc_id}, {"text": 1})
+            if matched_doc:
+                row["text"] = matched_doc.get("text", "")
+        else:
+            row["text"] = ""
+
+    return _to_suggestions(selected_rows, limit)
 
 
 def _apply_use_case_rerank(rows: list[dict[str, Any]], query: str) -> None:
