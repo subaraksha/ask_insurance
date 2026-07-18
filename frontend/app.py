@@ -107,7 +107,7 @@ st.caption("A guided health-insurance buying assistant for India — not a polic
 
 
 def api_call(method: str, path: str, **kwargs: object) -> dict:
-    response = requests.request(method, f"{API_BASE_URL}{path}", timeout=90, **kwargs)
+    response = requests.request(method, f"{API_BASE_URL}{path}", timeout=300, **kwargs)
     if response.ok:
         return response.json()
     try:
