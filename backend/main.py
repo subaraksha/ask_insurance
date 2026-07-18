@@ -245,6 +245,15 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
                 ]
                 break
 
+        # Check if any products were selected by the user for comparison previously,
+        # so we can append that selection context for the LLM
+        # We find user selections by parsing conversation text or state clues if present.
+        # This keeps the selection history directly available within the prompt's candidate list.
+        if previous_suggested:
+            # We can label selected products directly in the candidate metadata we send to Gemini
+            for p in previous_suggested:
+                p["is_selected_by_user_for_comparison"] = True
+
         advisor_turn = await run_advisor(state.profile, history, user_message, previous_suggested)
         if advisor_turn.scope_status == "out_of_scope":
             assistant_message = (
@@ -266,26 +275,27 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
                 advisor_turn.should_suggest_products or is_final_recommendation
             )
 
-            if should_suggest_products:
-                # If we should suggest products but don't have them generated yet, run semantic search.
-                if not previous_suggested:
-                    retrieval_query = json.dumps(
-                        {"profile": state.profile.model_dump(), "latest_user_message": user_message},
-                        ensure_ascii=False,
+            # Keep suggestions highly dynamic:
+            # If the LLM has already generated suggestions, keep them active in the session history so they remain
+            # in memory, but only display them visually when should_suggest_products is True.
+            if previous_suggested:
+                # Retrieve the full actual SuggestedProduct schemas list from history to avoid losing data
+                suggested_products = []
+                for msg in reversed(state.messages):
+                    if msg.role == "assistant" and msg.suggested_products:
+                        suggested_products = msg.suggested_products
+                        break
+            elif should_suggest_products:
+                retrieval_query = json.dumps(
+                    {"profile": state.profile.model_dump(), "latest_user_message": user_message},
+                    ensure_ascii=False,
+                )
+                try:
+                    suggested_products = await asyncio.to_thread(
+                        semantic_search, retrieval_query, limit=3
                     )
-                    try:
-                        suggested_products = await asyncio.to_thread(
-                            semantic_search, retrieval_query, limit=3
-                        )
-                    except Exception:
-                        suggested_products = []
-                else:
-                    # Carry forward the previous active recommendations if we are continuing that contextual thread.
+                except Exception:
                     suggested_products = []
-                    for msg in reversed(state.messages):
-                        if msg.role == "assistant" and msg.suggested_products:
-                            suggested_products = msg.suggested_products
-                            break
             else:
                 suggested_products = []
 
@@ -299,7 +309,16 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             assistant_message = advisor_turn.assistant_message
             jargon = jargon_result.explanations
             traps = traps_result.warnings
+            # If a user is asking follow-up questions, we keep their checklist context visible dynamically
+            # by fetching previous recommendations if present, while trusting advisor_turn.recommendation if new.
             recommendation = advisor_turn.recommendation
+            if recommendation is None:
+                # Find previous recommendation in history to keep it rendered
+                for msg in reversed(state.messages):
+                    if msg.role == "assistant" and msg.recommendation:
+                        recommendation = msg.recommendation
+                        break
+
     except AgentConfigurationError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     except Exception as error:

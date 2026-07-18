@@ -356,7 +356,21 @@ with st.sidebar:
 for idx, message in enumerate(st.session_state.messages):
     render_message(message, idx)
 
-render_comparison()
+# Check if a new recommendation has NOT been triggered yet, or if the latest message does NOT have product cards enabled.
+# If the user changed their topic (e.g. they are now talking about something else and products aren't active),
+# we should dynamically hide/reset the comparison table.
+latest_message_has_products = False
+if st.session_state.messages:
+    for msg in reversed(st.session_state.messages):
+        if msg["role"] == "assistant":
+            latest_message_has_products = msg.get("should_suggest_products", False)
+            break
+
+if latest_message_has_products:
+    render_comparison()
+else:
+    # Clear stale comparison states so they don't linger under unrelated messages
+    st.session_state.policy_comparison = None
 
 if not st.session_state.messages:
     render_message(
