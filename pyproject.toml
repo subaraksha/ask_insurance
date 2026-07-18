@@ -1,7 +1,7 @@
 [project]
 name = "ask-insurance"
 version = "0.1.0"
-description = "Conversational health-insurance buying guide powered by Gemini and the OpenAI Agents SDK"
+description = "Conversational health-insurance buying guide with MongoDB vector search"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,10 @@ dependencies = [
     "openai",
     "python-dotenv",
     "requests",
+    "pymongo>=4.10.0",
+    "dnspython>=2.6.0",
+    "pypdf>=5.0.0",
+    "sentence-transformers>=3.3.0",
     "streamlit",
     "uvicorn[standard]",
 ]

@@ -5,3 +5,7 @@ python-dotenv
 streamlit
 uvicorn[standard]
 requests
+pymongo>=4.10.0
+dnspython>=2.6.0
+pypdf>=5.0.0
+sentence-transformers>=3.3.0
