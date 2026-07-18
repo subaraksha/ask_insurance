@@ -42,6 +42,12 @@ app = FastAPI(title="Ask Insurance API", version="0.1.0")
 sessions = InMemorySessionStore()
 
 
+@app.get("/")
+async def root() -> dict[str, str]:
+    """Service landing endpoint for platform health checks."""
+    return {"status": "ok", "service": "ask-insurance-api"}
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}

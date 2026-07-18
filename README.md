@@ -56,3 +56,18 @@ Open the Streamlit URL shown in the terminal, usually
 This is educational guidance, not medical, legal, or financial advice. It does
 not compare live policy products, quote premiums, or guarantee claim outcomes.
 Final coverage depends on the policy wording and insurer underwriting.
+
+# Deploying the backend to Render
+
+This repository includes a `render.yaml` Blueprint configuration. When creating a
+Render web service, use the following commands if you configure it manually:
+
+```
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+Health Check Path: /health
+```
+
+Do not use `--reload` in Render. Render supplies the `PORT` environment variable
+and the server must listen on `0.0.0.0` so that it is reachable outside the
+container.

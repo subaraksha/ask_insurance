@@ -1,0 +1,7 @@
+services:
+  - type: web
+    runtime: python
+    name: ask-insurance-api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
