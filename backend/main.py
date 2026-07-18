@@ -80,12 +80,16 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             _apply_profile_update(
                 state.profile, advisor_turn.profile_updates.model_dump(exclude_none=True)
             )
+            is_final_recommendation = (
+                advisor_turn.ready_for_recommendation
+                and advisor_turn.recommendation is not None
+            )
             jargon_result, traps_result = await run_enrichment(
                 state.profile,
                 user_message,
                 advisor_turn.assistant_message,
                 advisor_turn.jargon_terms,
-                advisor_turn.show_buying_checks,
+                is_final_recommendation,
             )
             assistant_message = advisor_turn.assistant_message
             jargon = jargon_result.explanations
@@ -104,6 +108,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             role="assistant",
             content=assistant_message,
             jargon=jargon,
+            jargon_only=advisor_turn.jargon_only,
             warnings=traps,
             recommendation=recommendation,
         )
@@ -114,6 +119,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
         assistant_message=assistant_message,
         profile=state.profile,
         jargon=jargon,
+        jargon_only=advisor_turn.jargon_only,
         warnings=traps,
         recommendation=recommendation,
     )

@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://ask-insurance-7kgu.onrender.com")
 LOGO_PATH = Path(__file__).resolve().parents[1] / "ask_inurane_logo.png"
 
 st.set_page_config(page_title="Ask Insurance", page_icon="🩺", layout="wide")
@@ -60,6 +60,7 @@ def initialise_session() -> None:
                 "role": item["role"],
                 "content": item["content"],
                 "jargon": item.get("jargon", []),
+                "jargon_only": item.get("jargon_only", False),
                 "warnings": item.get("warnings", []),
                 "recommendation": item.get("recommendation"),
             }
@@ -71,19 +72,20 @@ def initialise_session() -> None:
 
 def render_message(message: dict) -> None:
     role = message["role"]
-    safe_content = html.escape(message["content"])
-    st.markdown(
-        f'<div class="chat-row {role}"><div class="chat-bubble">{safe_content}</div></div>',
-        unsafe_allow_html=True,
-    )
+    if not (role == "assistant" and message.get("jargon_only")):
+        safe_content = html.escape(message["content"])
+        st.markdown(
+            f'<div class="chat-row {role}"><div class="chat-bubble">{safe_content}</div></div>',
+            unsafe_allow_html=True,
+        )
     if role == "assistant":
         render_turn_details(message)
 
 
 def render_turn_details(message: dict) -> None:
     jargon = message.get("jargon", [])
-    warnings = message.get("warnings", [])
     recommendation = message.get("recommendation")
+    warnings = message.get("warnings", []) if recommendation else []
     if not any((jargon, warnings, recommendation)):
         return
 
@@ -186,6 +188,7 @@ if prompt := st.chat_input("Tell me about the health cover you need"):
         "role": "assistant",
         "content": result["assistant_message"],
         "jargon": result.get("jargon", []),
+        "jargon_only": result.get("jargon_only", False),
         "warnings": result.get("warnings", []),
         "recommendation": result.get("recommendation"),
     }

@@ -100,10 +100,17 @@ give medical, legal, or financial certainty.
 
 Only add jargon_terms when the user asks to explain a term or when a term is
 essential to understand your immediate reply. Include only the exact terms
-that need an explanation, up to three. Set show_buying_checks to true only for
-a final recommendation or when the user directly asks about a policy feature,
-exclusion, claim condition, or buying risk. Keep it false for greetings and
-ordinary profile-collection questions.
+that need an explanation, up to three. When the user is asking only to
+understand a term, set jargon_only to true. In that case, use a brief
+assistant_message placeholder because the interface will show only the jargon
+explanation; do not ask a profile question or add buying checks. Set
+jargon_only to false for every other kind of reply.
+
+Set show_buying_checks to true only when you are returning the final
+recommendation: ready_for_recommendation must be true and recommendation must
+not be null. Keep it false for term explanations, individual policy-feature
+questions, exclusions, claims questions, greetings, and profile-collection
+questions.
 """.strip(),
     )
 

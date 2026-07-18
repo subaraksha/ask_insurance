@@ -45,6 +45,7 @@ class AdvisorTurn(BaseModel):
     scope_status: Literal["in_scope", "out_of_scope"] = "in_scope"
     profile_updates: ProfileUpdate = Field(default_factory=ProfileUpdate)
     jargon_terms: list[str] = Field(default_factory=list)
+    jargon_only: bool = False
     show_buying_checks: bool = False
     ready_for_recommendation: bool = False
     recommendation: Recommendation | None = None
@@ -77,6 +78,7 @@ class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=4_000)
     jargon: list[JargonExplanation] = Field(default_factory=list)
+    jargon_only: bool = False
     warnings: list[TrapWarning] = Field(default_factory=list)
     recommendation: Recommendation | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -109,5 +111,6 @@ class ChatResponse(BaseModel):
     assistant_message: str
     profile: UserProfile
     jargon: list[JargonExplanation]
+    jargon_only: bool = False
     warnings: list[TrapWarning]
     recommendation: Recommendation | None = None
