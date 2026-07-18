@@ -124,6 +124,7 @@ class AdvisorTurn(BaseModel):
     show_buying_checks: bool = False
     ready_for_recommendation: bool = False
     recommendation: Recommendation | None = None
+    should_suggest_products: bool = False
 
 
 class JargonExplanation(BaseModel):
@@ -157,6 +158,7 @@ class ChatMessage(BaseModel):
     warnings: list[TrapWarning] = Field(default_factory=list)
     recommendation: Recommendation | None = None
     suggested_products: list[SuggestedProduct] = Field(default_factory=list)
+    should_suggest_products: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -191,3 +193,4 @@ class ChatResponse(BaseModel):
     warnings: list[TrapWarning]
     recommendation: Recommendation | None = None
     suggested_products: list[SuggestedProduct] = Field(default_factory=list)
+    should_suggest_products: bool = False

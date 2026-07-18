@@ -260,29 +260,34 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
                 advisor_turn.ready_for_recommendation
                 and advisor_turn.recommendation is not None
             )
-            if is_final_recommendation:
-                retrieval_query = json.dumps(
-                    {"profile": state.profile.model_dump(), "latest_user_message": user_message},
-                    ensure_ascii=False,
-                )
-                try:
-                    suggested_products = await asyncio.to_thread(
-                        semantic_search, retrieval_query, limit=3
+            # Determine whether we should display suggested products.
+            # We trust the advisor_turn's should_suggest_products flag or final recommendation status.
+            should_suggest_products = (
+                advisor_turn.should_suggest_products or is_final_recommendation
+            )
+
+            if should_suggest_products:
+                # If we should suggest products but don't have them generated yet, run semantic search.
+                if not previous_suggested:
+                    retrieval_query = json.dumps(
+                        {"profile": state.profile.model_dump(), "latest_user_message": user_message},
+                        ensure_ascii=False,
                     )
-                except Exception:
-                    suggested_products = []
-            else:
-                # If there are active previous suggested products, retain them in the response context so they stay rendered in the Streamlit UI
-                # unless a brand-new needs evaluation is occurring
-                if previous_suggested:
-                    # Map back to schemas format
+                    try:
+                        suggested_products = await asyncio.to_thread(
+                            semantic_search, retrieval_query, limit=3
+                        )
+                    except Exception:
+                        suggested_products = []
+                else:
+                    # Carry forward the previous active recommendations if we are continuing that contextual thread.
                     suggested_products = []
                     for msg in reversed(state.messages):
                         if msg.role == "assistant" and msg.suggested_products:
                             suggested_products = msg.suggested_products
                             break
-                else:
-                    suggested_products = []
+            else:
+                suggested_products = []
 
             jargon_result, traps_result = await run_enrichment(
                 state.profile,
@@ -312,6 +317,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             warnings=traps,
             recommendation=recommendation,
             suggested_products=suggested_products,
+            should_suggest_products=should_suggest_products,
         )
     )
     await sessions.update(state)
@@ -324,6 +330,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
         warnings=traps,
         recommendation=recommendation,
         suggested_products=suggested_products,
+        should_suggest_products=should_suggest_products,
     )
 
 

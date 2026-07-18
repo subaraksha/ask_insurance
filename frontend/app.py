@@ -130,6 +130,7 @@ def initialise_session() -> None:
                 "warnings": item.get("warnings", []),
                 "recommendation": item.get("recommendation"),
                 "suggested_products": item.get("suggested_products", []),
+                "should_suggest_products": item.get("should_suggest_products", False),
             }
             for item in session["messages"]
         ]
@@ -152,7 +153,7 @@ def render_message(message: dict, index: int = 0) -> None:
 def render_turn_details(message: dict, index: int = 0) -> None:
     jargon = message.get("jargon", [])
     recommendation = message.get("recommendation")
-    suggested_products = message.get("suggested_products", [])
+    suggested_products = message.get("suggested_products", []) if message.get("should_suggest_products", False) else []
     if not any((jargon, recommendation, suggested_products)):
         return
 
@@ -396,6 +397,7 @@ if prompt := st.chat_input("Tell me about the health cover you need"):
         "warnings": result.get("warnings", []),
         "recommendation": result.get("recommendation"),
         "suggested_products": result.get("suggested_products", []),
+        "should_suggest_products": result.get("should_suggest_products", False),
     }
     st.session_state.messages.append(assistant_turn)
     st.session_state.profile = result["profile"]

@@ -104,9 +104,13 @@ verify before buying. It must say that final terms depend on the policy wording
 and underwriting. If information is missing, keep recommendation null. Never
 give medical, legal, or financial certainty.
 
-Note on Product Suggestion:
-When the needs assessment is complete, the application's user interface displays a set of 3 retrieved product candidates matching the buying profile (under "Suggested products").
-If the user asks you to recommend, pick, or suggest one of these 3 suggested products (e.g., asking "which one of these 3 should I pick", "which one is best out of these", "what is your choice", etc.), you should review the retrieved product candidates context, pick the SINGLE best match for their specific profile (e.g. Niva Bupa Senior First or Tata AIG Elder Care if they are senior citizens, or a comprehensive family plan if they have parents/family), name it clearly, explain its primary advantage over the other candidates based on their specific situation (e.g. pre-existing conditions, specific benefits, or co-pay rules), and encourage them to compare them.
+Note on Product Suggestion & Recommendations:
+The application can display suggested insurance products matching the buying profile (under "Suggested products").
+You must decide whether we should render/suggest these products in this turn by setting `should_suggest_products` to true or false.
+- ONLY set `should_suggest_products` to true when the user's details are fully collected, you have completed the needs assessment, and you are returning the final buying recommendation (i.e. `ready_for_recommendation` is true and `recommendation` is not null).
+- Keep `should_suggest_products` as false at all other times, including during profile collection, clarifying details, general inquiries, general questions, or when answering specific follow-up questions after the recommendation has been made.
+- IMPORTANT: If the user asks you to recommend, pick, or suggest one of the compared or suggested products (e.g. asking "which one of these should I pick", "which one is best out of these", "what is your choice", etc.), you must ONLY suggest out of the products that are actually listed in the `retrieved_product_candidates`. Do NOT suggest or name any product that is not present in the provided `retrieved_product_candidates` list. Pick the single best match among them, name it clearly, and explain its primary advantage over the other candidates based on their specific situation.
+- IMPORTANT: If a user asks a general question (such as "What should I ask before purchasing?" or "What are the key concerns for a 60-year-old?"), do NOT return a product recommendation/checklist again or trigger product suggestion. Answer the question directly and set `should_suggest_products` to false.
 
 Only add jargon_terms when the user asks to explain a term or when a term is
 essential to understand your immediate reply. Include only the exact terms
@@ -119,6 +123,10 @@ jargon_only to false for every other kind of reply.
 Set show_buying_checks to true only when you are returning the final
 recommendation: ready_for_recommendation must be true and recommendation must
 not be null. Keep it false for term explanations, individual policy-feature
+questions, exclusions, claims questions, greetings, and profile-collection
+questions.
+""".strip(),
+    )
 questions, exclusions, claims questions, greetings, and profile-collection
 questions.
 """.strip(),

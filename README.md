@@ -1,133 +1,98 @@
-# Ask Insurance
+# 🩺 Ask Insurance
 
-Ask Insurance is a health-insurance research assistant for India. It combines a
-FastAPI API, Streamlit interface, MongoDB product store, Atlas Vector Search,
-and a locally-run open-source embedding model. It is educational only: the
-app links to official wordings and never treats a retrieval match as a quote,
-claim guarantee, or final buying recommendation.
+**Ask Insurance** is a highly sophisticated, AI-guided health-insurance buying assistant and research platform specifically designed for the complex health insurance market in India.
 
-## What changed
+Instead of acting as a typical lead-generation tool or commission-driven policy seller, **Ask Insurance** acts as an **unbiased educational guide**. It empowers buyers by analyzing, comparing, and explaining complex policy wordings directly grounded in official, legally-binding policy documents.
 
-- `insurance_products` stores each insurer/product/use-case/official wording URL.
-- `policy_chunks` stores the extracted policy text in chunks and a 384-dimension
-  vector generated locally using `sentence-transformers/all-MiniLM-L6-v2`.
-- The supplied 25-product catalog is in `data/product_catalog.json`.
-- `POST /catalog/ingest` accepts future catalog records; it upserts products,
-  downloads the public PDF, extracts readable text, chunks it, embeds it and
-  indexes it.
-- `POST /catalog/seed` ingests the supplied catalog.
-- `GET /catalog/search` retrieves the best matching products. The chat calls it
-  automatically and the UI presents selectable product cards and a metadata
-  comparison table.
+---
 
-## Setup
+## 🚀 Key Features
+
+* **Adaptive Conversational Interview:** A supportive, low-friction AI dialogue that dynamically discovers buying criteria (family composition, ages, location, pre-existing medical conditions, features, and target budget) rather than forcing users through a rigid questionnaire.
+* **Semantic Vector-Based Matching:** Uses local text embeddings to match a user's unique medical and demographic profile against an active, verified catalog of 25+ real-world insurance products.
+* **LLM-Grounded Policy Insights:** Extracts and synthesizes crucial sections of legalese from the official policy PDFs—summarizing key covers, critical exclusions, waiting periods, sub-limits, and co-payment details with extreme accuracy.
+* **Dynamic Side-by-Side Product Comparison:** Renders beautiful, fully responsive, and auto-formatted comparison matrices of selected policies directly inside the browser.
+* **Jargon Buster (Explainability Engine):** Automatically detects complex insurance terms (e.g., *restoration benefits*, *co-pay*, *waiting periods*) in the advisor's responses, translating them into simplified layman definitions with practical mathematical examples.
+* **100% Unbiased & Educational:** Always links directly back to the official insurer's hosted PDF, never invents terms, and emphasizes that final decisions belong to the insurer's official policy wording and underwriting.
+
+---
+
+## 🛠️ Technology Stack
+
+* **Frontend:** [Streamlit](https://streamlit.io/) — Python-native, reactive, clean, and interactive single-page web interface.
+* **Backend:** [FastAPI](https://fastapi.tiangolo.com/) — High-performance, asynchronous web framework providing endpoints for chat, search, comparison, and automated document ingestion.
+* **Database & Vector Store:** [MongoDB Atlas](https://www.mongodb.com/atlas) — Stores structured product schemas and high-dimensional document chunk coordinates. Uses **Atlas Vector Search** (or standard vector fallback) to align user profiles with the policy database.
+* **LLM Orchestration:** [Gemini 3.5 Flash](https://deepmind.google/technologies/gemini/) — Powers the adaptive insurance advisor, jargon explaining engine, and policy comparison reasoning.
+* **Local Embeddings (Privacy-First):** `sentence-transformers/all-MiniLM-L6-v2` — Generates 384-dimensional dense vectors locally on-device. No user health details or raw product texts are ever shared with third-party embedding APIs.
+* **PDF Extraction Engine:** `PyPDF` — Asynchronously processes and parses unstructured legally-binding PDF documents into clean, searchable, and chunkable text formats.
+
+---
+
+## 📂 Project Structure
+
+```text
+ask_insurance/
+├── backend/
+│   ├── agents.py       # Core LLM Agents (Advisor, Jargon Buster, Policy Analyst)
+│   ├── catalog.py      # MongoDB Vector Store, local embedding pipeline, and search
+│   ├── main.py         # FastAPI REST Router (Sessions, Catalog search & ingestion)
+│   └── schemas.py      # Pydantic data schemas (Chat state, User profiles, Catalog)
+├── frontend/
+│   └── app.py          # Streamlit SPA Chat & Product comparison UI
+├── data/
+│   └── product_catalog.json   # Seed data containing 25+ premium real-world products
+├── requirements.txt    # Python package dependencies
+├── pyproject.toml      # Build systems and package configs
+└── README.md           # This document!
+```
+
+---
+
+## ⚙️ Setup & Local Installation
 
 Use Python 3.12 or newer.
 
 ```bash
-python3.12 -m venv .venv
+# Clone the repository
+git clone https://github.com/subaraksha/ask_insurance.git
+cd ask_insurance
+
+# Setup virtual environment
+python3 -m venv .venv
 source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Copy configuration template
 cp .env.example .env
 ```
 
-Set these values in `.env` (your existing `MONGODB_URI` is used as-is):
+### Configure Environment Variables
+
+Set these values in your `.env` file:
 
 ```env
-MONGODB_URI=mongodb+srv://...
+MONGODB_URI=your_mongodb_atlas_connection_string
 MONGODB_DATABASE=ask_insurance
-GOOGLE_API_KEY=your_key_here
+GOOGLE_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-3.5-flash
-# Optional but recommended for production catalog writes
-INGEST_API_KEY=choose-a-long-random-secret
-# Optional; this is the default local open-source model
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+INGEST_API_KEY=choose-a-long-random-secret  # To protect ingestion endpoints
 ```
 
-The first catalog ingestion downloads the model files and public PDFs. The
-embeddings are generated on the application machine; no product text is sent
-to an embedding API.
+---
 
-## Run and ingest
+## 🏃‍♂️ How to Run
 
-Start the API:
+### 1. Start the FastAPI Backend
 
 ```bash
 uvicorn backend.main:app --reload
 ```
 
-In a second terminal, run the UI:
+### 2. Start the Streamlit Frontend (In a second terminal)
 
 ```bash
 streamlit run frontend/app.py
 ```
-
-Ingest the provided catalog (downloads wordings, so this can take a few
-minutes):
-
-```bash
-curl -X POST 'http://127.0.0.1:8000/catalog/seed' \
-  -H 'X-Admin-Key: your-ingest-key'
-```
-
-For a quick metadata/vector smoke test that skips downloading PDFs:
-
-```bash
-curl -X POST 'http://127.0.0.1:8000/catalog/seed?fetch_policy_wordings=false' \
-  -H 'X-Admin-Key: your-ingest-key'
-```
-
-When `INGEST_API_KEY` is not set, the header is not required for local
-development. Do set it before exposing the service publicly.
-
-## Add or refresh products
-
-Send one or more public policy wording URLs to the ingestion endpoint. A
-repeat record is safe: it replaces that product's old chunks.
-
-```bash
-curl -X POST 'http://127.0.0.1:8000/catalog/ingest' \
-  -H 'Content-Type: application/json' \
-  -H 'X-Admin-Key: your-ingest-key' \
-  -d '{
-    "products": [{
-      "insurance_company": "Example Insurer",
-      "product": "Example Health Plan",
-      "primary_use_case": "Comprehensive Individual",
-      "pdf_source": "https://example.com/policy-wording.pdf"
-    }]
-  }'
-```
-
-Check ingestion and Mongo state with `GET /catalog/status`; test retrieval with
-`GET /catalog/search?query=healthy%2028%20year%20old%20first%20health%20cover`.
-
-## Atlas Vector Search index
-
-On API startup and before each ingestion, the service requests this index via
-MongoDB's `createSearchIndexes` command. Atlas builds it asynchronously; while
-it builds (or when using standard MongoDB), the API uses a simple keyword
-fallback. The required index is named `policy_vector_index` on the
-`policy_chunks` collection:
-
-```json
-{
-  "fields": [
-    {"type": "vector", "path": "embedding", "numDimensions": 384, "similarity": "cosine"},
-    {"type": "filter", "path": "insurance_company"},
-    {"type": "filter", "path": "primary_use_case"}
-  ]
-}
-```
-
-If the connected Mongo deployment does not permit Search-index commands, create
-that JSON definition manually in Atlas Search. A standard local MongoDB server
-does not provide `$vectorSearch`; the app remains usable with its fallback,
-but Atlas Vector Search is required for semantic retrieval.
-
-## Deployment
-
-The included `render.yaml` installs `requirements.txt` and starts the API. For
-Render, configure `MONGODB_URI`, `GOOGLE_API_KEY`, and `INGEST_API_KEY` as
-secret environment variables. Use persistent model caching or a worker image
-if cold-start download time becomes important.
