@@ -279,6 +279,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             )
             jargon, traps, recommendation = [], [], None
             suggested_products = []
+            should_suggest_products = False
         else:
             _apply_profile_update(
                 state.profile, advisor_turn.profile_updates.model_dump(exclude_none=True)

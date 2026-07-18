@@ -159,9 +159,23 @@ def render_message(message: dict, index: int = 0) -> None:
 
 
 def render_turn_details(message: dict, index: int = 0) -> None:
+    # Find the index of the absolute latest assistant message in the entire conversation
+    latest_assistant_idx = -1
+    for i, msg in enumerate(st.session_state.messages):
+        if msg.get("role") == "assistant":
+            latest_assistant_idx = i
+
+    is_latest_assistant = (index == latest_assistant_idx)
+
     jargon = message.get("jargon", [])
-    recommendation = message.get("recommendation")
-    suggested_products = message.get("suggested_products", []) if message.get("should_suggest_products", False) else []
+    
+    # Only render recommendation and suggested products if this is the latest assistant message
+    recommendation = message.get("recommendation") if is_latest_assistant else None
+    suggested_products = (
+        message.get("suggested_products", [])
+        if (is_latest_assistant and message.get("should_suggest_products", False))
+        else []
+    )
     if not any((jargon, recommendation, suggested_products)):
         return
 
@@ -369,16 +383,25 @@ for idx, message in enumerate(st.session_state.messages):
 # we should dynamically hide/reset the comparison table.
 latest_message_has_products = False
 if st.session_state.messages:
-    for msg in reversed(st.session_state.messages):
-        if msg["role"] == "assistant":
-            latest_message_has_products = msg.get("should_suggest_products", False)
-            break
+    # If the user has just sent a new message, we immediately treat products as inactive/stale
+    if st.session_state.messages[-1]["role"] == "user":
+        latest_message_has_products = False
+    else:
+        for msg in reversed(st.session_state.messages):
+            if msg["role"] == "assistant":
+                latest_message_has_products = msg.get("should_suggest_products", False)
+                break
 
 if latest_message_has_products:
     render_comparison()
 else:
-    # Clear stale comparison states so they don't linger under unrelated messages
+    # Clear stale comparison states, candidates, insights, and checkbox/button states so they don't linger
     st.session_state.policy_comparison = None
+    st.session_state.product_candidates.clear()
+    st.session_state.policy_insights.clear()
+    for key in list(st.session_state.keys()):
+        if key.startswith("product-select-") or key.startswith("policy-details-"):
+            st.session_state.pop(key, None)
 
 if not st.session_state.messages:
     render_message(
