@@ -127,10 +127,6 @@ questions, exclusions, claims questions, greetings, and profile-collection
 questions.
 """.strip(),
     )
-questions, exclusions, claims questions, greetings, and profile-collection
-questions.
-""".strip(),
-    )
 
     jargon_buster = Agent(
         name="Jargon Buster",
