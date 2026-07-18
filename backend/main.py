@@ -324,45 +324,54 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             suggested_products = []
             should_suggest_products = False
         else:
+            reset_profile = getattr(advisor_turn, "reset_profile", False)
+            if reset_profile:
+                logger.info(f"Context switch detected. Resetting profile for user_id {user_id}...")
+                state.profile = UserProfile()  # Reset to a fresh empty profile
+
             _apply_profile_update(
                 state.profile, advisor_turn.profile_updates.model_dump(exclude_none=True)
             )
+            # Check if a checklist was already delivered in the conversation history for the CURRENT scenario.
+            # We look backwards through state.messages. If we hit a message that reset the profile, we stop.
+            recommendation_already_delivered = False
+            for msg in reversed(state.messages):
+                if getattr(msg, "reset_profile", False):
+                    break
+                if msg.role == "assistant" and msg.recommendation is not None:
+                    recommendation_already_delivered = True
+                    break
+
             is_final_recommendation = (
                 advisor_turn.ready_for_recommendation
                 and advisor_turn.recommendation is not None
             )
-            # Determine whether we should display suggested products.
-            # We trust the advisor_turn's should_suggest_products flag or final recommendation status.
-            should_suggest_products = (
-                advisor_turn.should_suggest_products or is_final_recommendation
-            )
 
-            # Keep suggestions highly dynamic:
-            # If the LLM has already generated suggestions, keep them active in the session history so they remain
-            # in memory, but only display them visually when should_suggest_products is True.
-            if previous_suggested:
-                # Retrieve the full actual SuggestedProduct schemas list from history to avoid losing data
+            # Programmatic safeguard: if a recommendation has already been delivered,
+            # never allow duplicate checklists or product suggestions on subsequent turns.
+            if recommendation_already_delivered:
+                should_suggest_products = False
                 suggested_products = []
-                for msg in reversed(state.messages):
-                    if msg.role == "assistant" and msg.suggested_products:
-                        suggested_products = msg.suggested_products
-                        break
-            elif should_suggest_products:
-                logger.info(f"Generating semantic recommendations for user_id {user_id}...")
-                retrieval_query = json.dumps(
-                    {"profile": state.profile.model_dump(), "latest_user_message": user_message},
-                    ensure_ascii=False,
-                )
-                try:
-                    suggested_products = await asyncio.to_thread(
-                        semantic_search, retrieval_query, limit=3
-                    )
-                    logger.info(f"Retrieved {len(suggested_products)} products: {[p.product for p in suggested_products]}")
-                except Exception as err:
-                    logger.error(f"Semantic search retrieval failed: {err}", exc_info=True)
-                    suggested_products = []
+                recommendation = None
             else:
-                suggested_products = []
+                should_suggest_products = is_final_recommendation
+
+                if should_suggest_products:
+                    logger.info(f"Generating semantic recommendations for user_id {user_id}...")
+                    retrieval_query = json.dumps(
+                        {"profile": state.profile.model_dump(), "latest_user_message": user_message},
+                        ensure_ascii=False,
+                    )
+                    try:
+                        suggested_products = await asyncio.to_thread(
+                            semantic_search, retrieval_query, limit=3
+                        )
+                        logger.info(f"Retrieved {len(suggested_products)} products: {[p.product for p in suggested_products]}")
+                    except Exception as err:
+                        logger.error(f"Semantic search retrieval failed: {err}", exc_info=True)
+                        suggested_products = []
+                else:
+                    suggested_products = []
 
             jargon_result, traps_result = await run_enrichment(
                 state.profile,
@@ -374,15 +383,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             assistant_message = advisor_turn.assistant_message
             jargon = jargon_result.explanations
             traps = traps_result.warnings
-            # If a user is asking follow-up questions, we keep their checklist context visible dynamically
-            # by fetching previous recommendations if present, while trusting advisor_turn.recommendation if new.
-            recommendation = advisor_turn.recommendation
-            if recommendation is None:
-                # Find previous recommendation in history to keep it rendered
-                for msg in reversed(state.messages):
-                    if msg.role == "assistant" and msg.recommendation:
-                        recommendation = msg.recommendation
-                        break
+            recommendation = None if recommendation_already_delivered else advisor_turn.recommendation
 
     except AgentConfigurationError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
@@ -402,6 +403,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
             recommendation=recommendation,
             suggested_products=suggested_products,
             should_suggest_products=should_suggest_products,
+            reset_profile=reset_profile,
         )
     )
     await sessions.update(state)
@@ -415,6 +417,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
         recommendation=recommendation,
         suggested_products=suggested_products,
         should_suggest_products=should_suggest_products,
+        reset_profile=reset_profile,
     )
 
 

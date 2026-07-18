@@ -125,6 +125,7 @@ class AdvisorTurn(BaseModel):
     ready_for_recommendation: bool = False
     recommendation: Recommendation | None = None
     should_suggest_products: bool = False
+    reset_profile: bool = Field(default=False, description="Set to true if the user switched to a completely different buying scenario, meaning we should clear all previously collected profile fields.")
 
 
 class JargonExplanation(BaseModel):
@@ -159,6 +160,7 @@ class ChatMessage(BaseModel):
     recommendation: Recommendation | None = None
     suggested_products: list[SuggestedProduct] = Field(default_factory=list)
     should_suggest_products: bool = False
+    reset_profile: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -194,3 +196,4 @@ class ChatResponse(BaseModel):
     recommendation: Recommendation | None = None
     suggested_products: list[SuggestedProduct] = Field(default_factory=list)
     should_suggest_products: bool = False
+    reset_profile: bool = False

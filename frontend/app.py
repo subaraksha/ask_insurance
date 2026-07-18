@@ -159,21 +159,11 @@ def render_message(message: dict, index: int = 0) -> None:
 
 
 def render_turn_details(message: dict, index: int = 0) -> None:
-    # Find the index of the absolute latest assistant message in the entire conversation
-    latest_assistant_idx = -1
-    for i, msg in enumerate(st.session_state.messages):
-        if msg.get("role") == "assistant":
-            latest_assistant_idx = i
-
-    is_latest_assistant = (index == latest_assistant_idx)
-
     jargon = message.get("jargon", [])
-    
-    # Only render recommendation and suggested products if this is the latest assistant message
-    recommendation = message.get("recommendation") if is_latest_assistant else None
+    recommendation = message.get("recommendation")
     suggested_products = (
         message.get("suggested_products", [])
-        if (is_latest_assistant and message.get("should_suggest_products", False))
+        if message.get("should_suggest_products", False)
         else []
     )
     if not any((jargon, recommendation, suggested_products)):
@@ -225,14 +215,92 @@ def render_turn_details(message: dict, index: int = 0) -> None:
                     if st.button("View policy details", key=f"policy-details-{item['product_id']}-{index}", use_container_width=True):
                         with st.spinner(f"Reading {item['product']} policy wording..."):
                             try:
-                                st.session_state.policy_insights[item["product_id"]] = api_call(
+                                st.session_state.policy_insights[f"{item['product_id']}-{index}"] = api_call(
                                     "GET", f"/catalog/products/{item['product_id']}/insight"
                                 )
                             except (requests.RequestException, RuntimeError) as error:
                                 st.error(str(error))
                     st.link_button("Read official policy wording", item["pdf_source"], use_container_width=True)
-                    if insight := st.session_state.policy_insights.get(item["product_id"]):
+                    if insight := st.session_state.policy_insights.get(f"{item['product_id']}-{index}"):
                         render_policy_insight(insight)
+
+            # Turn-scoped local inline comparison rendering
+            selected = []
+            for item in suggested_products:
+                if st.session_state.get(f"product-select-{item['product_id']}-{index}"):
+                    selected.append(item)
+
+            if len(suggested_products) >= 2:
+                st.caption(f"Select at least two products to compare ({len(selected)} selected).")
+                if st.button(
+                    "Compare selected products",
+                    key=f"compare-button-{index}",
+                    type="primary",
+                    disabled=len(selected) < 2,
+                    use_container_width=False,
+                ):
+                    with st.spinner("Comparing policy wording excerpts..."):
+                        try:
+                            st.session_state.policy_comparisons[index] = api_call(
+                                "POST",
+                                "/catalog/compare",
+                                json={"product_ids": [item["product_id"] for item in selected]},
+                            )
+                        except (requests.RequestException, RuntimeError) as error:
+                            st.error(str(error))
+
+                comparison = st.session_state.policy_comparisons.get(index)
+                selected_ids = [item["product_id"] for item in selected]
+                if comparison and comparison.get("product_ids") == selected_ids:
+                    st.subheader("Selected product comparison")
+                    
+                    # Build a beautiful, responsive, and fit-to-content HTML table
+                    html_table = "<div class='comparison-container'><table class='comparison-table'>"
+                    
+                    # Headers
+                    html_table += "<thead><tr><th>Criterion</th>"
+                    for label in comparison["product_labels"]:
+                        html_table += f"<th>{html.escape(label)}</th>"
+                    html_table += "</tr></thead><tbody>"
+                    
+                    # Rows
+                    for row in comparison["rows"]:
+                        html_table += "<tr>"
+                        html_table += f"<td class='criterion-cell'>{html.escape(row['criterion'])}</td>"
+                        for val in row["values"]:
+                            if isinstance(val, list):
+                                bullet_list = "".join(f"<li>{html.escape(str(item))}</li>" for item in val)
+                                html_table += f"<td><ul>{bullet_list}</ul></td>"
+                            else:
+                                # Convert bullet points or lists if the text uses '*' or '-' prefixes, or has newlines
+                                lines = str(val).split("\n")
+                                if any(line.strip().startswith(("- ", "* ", "• ")) for line in lines if line.strip()):
+                                    list_items = []
+                                    for line in lines:
+                                        stripped = line.strip()
+                                        if not stripped:
+                                            continue
+                                        if stripped.startswith("- "):
+                                            list_items.append(f"<li>{html.escape(stripped[2:])}</li>")
+                                        elif stripped.startswith("* "):
+                                            list_items.append(f"<li>{html.escape(stripped[2:])}</li>")
+                                        elif stripped.startswith("• "):
+                                            list_items.append(f"<li>{html.escape(stripped[2:])}</li>")
+                                        else:
+                                            list_items.append(f"<li>{html.escape(stripped)}</li>")
+                                    html_table += f"<td><ul>{''.join(list_items)}</ul></td>"
+                                else:
+                                    escaped_val = html.escape(str(val)).replace("\n", "<br/>")
+                                    html_table += f"<td>{escaped_val}</td>"
+                        html_table += "</tr>"
+                        
+                    html_table += "</tbody></table></div>"
+                    
+                    st.markdown(html_table, unsafe_allow_html=True)
+                    for note in comparison.get("important_notes", []):
+                        st.info(note)
+                    st.caption(comparison["source_note"])
+
         st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -255,94 +323,11 @@ def render_policy_insight(insight: dict) -> None:
         st.caption(insight["source_note"])
 
 
-def render_comparison() -> None:
-    candidates = st.session_state.get("product_candidates", {})
-    selected = []
-    for product_id, item in candidates.items():
-        is_selected = False
-        for k, v in st.session_state.items():
-            if k.startswith(f"product-select-{product_id}-") and v:
-                is_selected = True
-                break
-        if is_selected:
-            selected.append(item)
-    if not candidates:
-        return
-    st.caption(f"Select at least two products to compare ({len(selected)} selected).")
-    if st.button(
-        "Compare selected products",
-        type="primary",
-        disabled=len(selected) < 2,
-        use_container_width=False,
-    ):
-        with st.spinner("Comparing policy wording excerpts..."):
-            try:
-                st.session_state.policy_comparison = api_call(
-                    "POST",
-                    "/catalog/compare",
-                    json={"product_ids": [item["product_id"] for item in selected]},
-                )
-            except (requests.RequestException, RuntimeError) as error:
-                st.error(str(error))
-
-    comparison = st.session_state.get("policy_comparison")
-    selected_ids = [item["product_id"] for item in selected]
-    if comparison and comparison.get("product_ids") == selected_ids:
-        st.subheader("Selected product comparison")
-        
-        # Build a beautiful, responsive, and fit-to-content HTML table
-        html_table = "<div class='comparison-container'><table class='comparison-table'>"
-        
-        # Headers
-        html_table += "<thead><tr><th>Criterion</th>"
-        for label in comparison["product_labels"]:
-            html_table += f"<th>{html.escape(label)}</th>"
-        html_table += "</tr></thead><tbody>"
-        
-        # Rows
-        for row in comparison["rows"]:
-            html_table += "<tr>"
-            html_table += f"<td class='criterion-cell'>{html.escape(row['criterion'])}</td>"
-            for val in row["values"]:
-                if isinstance(val, list):
-                    bullet_list = "".join(f"<li>{html.escape(str(item))}</li>" for item in val)
-                    html_table += f"<td><ul>{bullet_list}</ul></td>"
-                else:
-                    # Convert bullet points or lists if the text uses '*' or '-' prefixes, or has newlines
-                    lines = str(val).split("\n")
-                    if any(line.strip().startswith(("- ", "* ", "• ")) for line in lines if line.strip()):
-                        list_items = []
-                        for line in lines:
-                            stripped = line.strip()
-                            if not stripped:
-                                continue
-                            if stripped.startswith("- "):
-                                list_items.append(f"<li>{html.escape(stripped[2:])}</li>")
-                            elif stripped.startswith("* "):
-                                list_items.append(f"<li>{html.escape(stripped[2:])}</li>")
-                            elif stripped.startswith("• "):
-                                list_items.append(f"<li>{html.escape(stripped[2:])}</li>")
-                            else:
-                                list_items.append(f"<li>{html.escape(stripped)}</li>")
-                        html_table += f"<td><ul>{''.join(list_items)}</ul></td>"
-                    else:
-                        escaped_val = html.escape(str(val)).replace("\n", "<br/>")
-                        html_table += f"<td>{escaped_val}</td>"
-            html_table += "</tr>"
-            
-        html_table += "</tbody></table></div>"
-        
-        st.markdown(html_table, unsafe_allow_html=True)
-        for note in comparison.get("important_notes", []):
-            st.info(note)
-        st.caption(comparison["source_note"])
-
-
 try:
     initialise_session()
     st.session_state.setdefault("product_candidates", {})
     st.session_state.setdefault("policy_insights", {})
-    st.session_state.setdefault("policy_comparison", None)
+    st.session_state.setdefault("policy_comparisons", {})
 except (requests.RequestException, RuntimeError) as error:
     st.error(f"Cannot connect to the backend: {error}")
     st.stop()
@@ -367,41 +352,16 @@ with st.sidebar:
         st.write("Start by telling me who needs cover.")
 
     if st.button("Start a new conversation"):
-        for key in ("user_id", "messages", "profile", "product_candidates", "policy_insights", "policy_comparison"):
+        for key in ("user_id", "messages", "profile", "product_candidates", "policy_insights", "policy_comparisons"):
             st.session_state.pop(key, None)
         for key in list(st.session_state):
-            if key.startswith("product-select-"):
+            if key.startswith("product-select-") or key.startswith("policy-details-") or key.startswith("compare-button-"):
                 st.session_state.pop(key)
         st.query_params.clear()
         st.rerun()
 
 for idx, message in enumerate(st.session_state.messages):
     render_message(message, idx)
-
-# Check if a new recommendation has NOT been triggered yet, or if the latest message does NOT have product cards enabled.
-# If the user changed their topic (e.g. they are now talking about something else and products aren't active),
-# we should dynamically hide/reset the comparison table.
-latest_message_has_products = False
-if st.session_state.messages:
-    # If the user has just sent a new message, we immediately treat products as inactive/stale
-    if st.session_state.messages[-1]["role"] == "user":
-        latest_message_has_products = False
-    else:
-        for msg in reversed(st.session_state.messages):
-            if msg["role"] == "assistant":
-                latest_message_has_products = msg.get("should_suggest_products", False)
-                break
-
-if latest_message_has_products:
-    render_comparison()
-else:
-    # Clear stale comparison states, candidates, insights, and checkbox/button states so they don't linger
-    st.session_state.policy_comparison = None
-    st.session_state.product_candidates.clear()
-    st.session_state.policy_insights.clear()
-    for key in list(st.session_state.keys()):
-        if key.startswith("product-select-") or key.startswith("policy-details-"):
-            st.session_state.pop(key, None)
 
 if not st.session_state.messages:
     render_message(
