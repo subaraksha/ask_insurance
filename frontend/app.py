@@ -96,7 +96,7 @@ def render_turn_details(message: dict) -> None:
             for item in jargon:
                 with st.expander(item["term"]):
                     st.write(item["simple_meaning"])
-                    st.caption(f"Why it matters: {item['why_it_matters']}")
+                    st.warning(f"Why it matters: {item['why_it_matters']}")
                     st.info(f"Example: {item['example']}")
                     st.success(f"What to prefer: {item['what_to_prefer']}")
         if warnings:
