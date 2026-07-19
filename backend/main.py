@@ -316,6 +316,7 @@ async def send_message(user_id: str, request: ChatRequest) -> ChatResponse:
         advisor_turn = await run_advisor(state.profile, history, user_message, previous_suggested)
         logger.info(f"Advisor response generated. Scope status: {advisor_turn.scope_status}")
         
+        reset_profile = False  # Initialize default value to prevent UnboundLocalError
         if advisor_turn.scope_status == "out_of_scope":
             assistant_message = (
                 "That’s outside my scope. I can help with choosing health insurance."
