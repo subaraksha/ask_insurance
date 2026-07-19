@@ -23,6 +23,7 @@ Instead of acting as a typical lead-generation tool or commission-driven policy 
 * **Backend:** [FastAPI](https://fastapi.tiangolo.com/) — High-performance, asynchronous web framework providing endpoints for chat, search, comparison, and automated document ingestion.
 * **Database & Vector Store:** [MongoDB Atlas](https://www.mongodb.com/atlas) — Stores structured product schemas and high-dimensional document chunk coordinates. Uses **Atlas Vector Search** (or standard vector fallback) to align user profiles with the policy database.
 * **LLM Orchestration:** [Gemini 3.5 Flash](https://deepmind.google/technologies/gemini/) — Powers the adaptive insurance advisor, jargon explaining engine, and policy comparison reasoning.
+* **Agent Orchestration:** [OpenAI Agent SDK](https://developers.openai.com/api/docs/guides/agents) — Powers the multi-agent insurance workflow, coordinating policy retrieval, coverage analysis, jargon explanation, and personalized recommendations.
 * **Local Embeddings (Privacy-First):** `sentence-transformers/all-MiniLM-L6-v2` — Generates 384-dimensional dense vectors locally on-device. No user health details or raw product texts are ever shared with third-party embedding APIs.
 * **PDF Extraction Engine:** `PyPDF` — Asynchronously processes and parses unstructured legally-binding PDF documents into clean, searchable, and chunkable text formats.
 
@@ -83,7 +84,7 @@ INGEST_API_KEY=choose-a-long-random-secret  # To protect ingestion endpoints
 
 ---
 
-## 🏃‍♂️ How to Run
+## 🚀 How to Run
 
 ### 1. Start the FastAPI Backend
 
